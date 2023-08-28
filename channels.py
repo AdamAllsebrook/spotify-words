@@ -1,15 +1,14 @@
-
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver import Chrome
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from concurrent import futures
-from tqdm import tqdm
-import logging
-from database import Artist
+import sys
+import argparse
+from database import Artist, get_db
 
 
-def get_yt_channel(artist_name, options=None):
+def find_youtube_channel(artist_name, options=None):
     SEARCH_URL = 'https://www.youtube.com/results?search_query=%s'
     ANCHOR_SELECTOR = 'a.channel-link, .ytd-secondary-search-container-renderer a'
 
@@ -26,40 +25,35 @@ def get_yt_channel(artist_name, options=None):
         return anchor_tag.get_attribute('href')
 
 
-def get_all_yt_channels(con, cur, artist_df, timeout=20, options=None, max_retries=3, max_workers=5):
-    def try_get_all_yt_channels():
-        artists_in_db = Artist.get_all(cur)
-        with futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_urls = []
-            for index, row in artist_df.iterrows():
-                if row[Artist.NAME] in artists_in_db[Artist.NAME].values:
-                    continue
-                future_urls.append((
-                    index,
-                    executor.submit(get_yt_channel, row[Artist.NAME], options)
-                ))
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--db-path', type=str)
+    parser.add_argument('--artist-name', type=str)
+    parser.add_argument('--spotify-uri', type=str)
+    parser.add_argument('--max-retries', type=int, default=3)
 
-            n_exceptions = 0
-            for (index, future_url) in tqdm(future_urls):
-                try:
-                    url = future_url.result(timeout=timeout)
-                    row = artist_df.loc[index]
-                    Artist.save(cur, row[Artist.NAME],
-                                row[Artist.SPOTIFY], url)
-                    con.commit()
-                except Exception:
-                    n_exceptions += 1
-                    logging.debug(f'Exception for {index}')
+    args = parser.parse_args()
 
-        return len(future_urls) - n_exceptions, n_exceptions
+    options = Options()
+    options.add_argument('--headless=new')
+    options.add_argument('--window-size=2560,1440')
 
-    logging.info('Starting match spotify artists to youtube channels')
-    completed = False
-    retries = 0
-    while not completed and retries < max_retries:
-        if retries != 0:
-            logging.info(f'Retrying attempt: {retries + 1}/{max_retries}')
-        success, fail = try_get_all_yt_channels()
-        completed = fail == 0
-        retries += 1
-        logging.info(f'Found channels for {success} artists, {fail} failures')
+    con, cur = get_db(args.db_path)
+    artists = Artist.get_by_spotify(cur, args.spotify_uri)
+    if artists.shape[0] > 0 and artists[Artist.YOUTUBE].iloc[0] is not None:
+        print(f'{args.artist_name} already in database')
+    else:
+        for n in range(args.max_retries):
+            try:
+                url = find_youtube_channel(args.artist_name, options=options)
+                break
+            except Exception:
+                url = None
+
+        if url is None:
+            print(
+                f'Could not find channel for {args.artist_name}', file=sys.stderr)
+        else:
+            Artist.save(cur, args.artist_name, args.spotify_uri, url)
+            con.commit()
+            print(f'Found channel for {args.artist_name}: {url}')

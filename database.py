@@ -65,31 +65,41 @@ class Artist:
         cur.execute(' SELECT * FROM artist')
         return Artist.sql_result_to_df(cur.fetchall())
 
-    def get_by_youtube(cur, yt_channel):
-        cur.execute(f'''
-    SELECT * FROM artist
-    WHERE {Artist.YOUTUBE} = ?''',
-                    (yt_channel,))
-        return Artist.sql_result_to_df(cur.fetchone())
+    def get_by_spotify(cur, spotify_uri):
+        cur.execute(
+            f'SELECT * FROM artist WHERE {Artist.SPOTIFY} = ?',
+            (spotify_uri,))
+
+        return Artist.sql_result_to_df(cur.fetchall())
+
+    def get_by_youtube(cur, youtube_channel):
+        cur.execute(
+            f'SELECT * FROM artist WHERE {Artist.YOUTUBE} = ?',
+            (youtube_channel,))
+        return Artist.sql_result_to_df(cur.fetchall())
 
     def get_by_updated_days_ago(cur, days_ago):
         cur.execute(f'''
-    SELECT * FROM artist
-    WHERE {Artist.UPDATED} < datetime('now', '-{days_ago} day')''')
-
+                    SELECT * FROM artist
+                    WHERE {Artist.UPDATED} < datetime('now', '-{days_ago} day')
+                    ''')
         return Artist.sql_result_to_df(cur.fetchall())
 
     def save(cur, name, spotify_uri, youtube_url):
         cur.execute(
-            '''INSERT INTO artist (name, spotify_uri, youtube_url, updated_at)
-               VALUES (?, ?, ?, datetime('2001-01-01'))''',
+            f'''INSERT INTO artist (
+                {Artist.NAME},
+                {Artist.SPOTIFY},
+                {Artist.YOUTUBE},
+                {Artist.UPDATED})
+            VALUES (?, ?, ?, datetime('2001-01-01'))''',
             (name, spotify_uri, youtube_url)
         )
 
     def set_updated(cur, artist_id):
         cur.execute(
-            '''UPDATE artist
-               SET updated_at = datetime('now')
+            f'''UPDATE artist
+               SET {Artist.UPDATED} = datetime('now')
                WHERE id = ?''',
             (artist_id,)
         )

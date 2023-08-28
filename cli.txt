@@ -1,0 +1,2 @@
+For getting artist channels from the csv:
+cat datasets/artists.csv | parallel --jobs 4 --colsep , python channels.py --db-path=datasets/db3.sqlite --artist-name={2} --spotify-uri={3}
