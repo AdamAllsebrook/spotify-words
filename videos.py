@@ -60,25 +60,27 @@ def get_all_yt_videos(con, cur, artist_df, timeout=60, options=None, max_workers
         ]
 
         for (artist_id, channel_url, future_videos) in tqdm(all_future_videos):
-            try:
-                videos = future_videos.result(timeout=timeout)
-                videos_in_db = Video.get_by_artist(cur, artist_id)
+            videos = future_videos.result(timeout=timeout)
+            # artist = Artist.get_by_youtube(cur, channel_url)
+            # artist_id = artist[Artist.ID]
+            videos_in_db = Video.get_by_artist(cur, artist_id)
 
-                rows = []
-                for (video_url, video_title) in videos:
-                    if video_url not in videos_in_db[Video.YOUTUBE].values:
-                        rows.append({
-                            Video.ARTIST_ID: artist_id,
-                            Video.TITLE: video_title,
-                            Video.YOUTUBE: video_url
-                        })
+            rows = []
+            for (video_url, video_title) in videos:
+                print(video_title)
+                if video_url not in videos_in_db[Video.YOUTUBE].values:
+                    rows.append({
+                        Video.ARTIST_ID: artist_id,
+                        Video.TITLE: video_title,
+                        Video.YOUTUBE: video_url
+                    })
 
-                new_videos_df = pd.DataFrame(
-                    rows, columns=[Video.ARTIST_ID, Video.YOUTUBE, Video.TITLE])
-                Video.save_many(cur, new_videos_df)
-                Artist.set_updated(cur, artist_id)
-                con.commit()
+            new_videos_df = pd.DataFrame(
+                rows, columns=[Video.ARTIST_ID, Video.YOUTUBE, Video.TITLE])
+            Video.save_many(cur, new_videos_df)
+            Artist.set_updated(cur, artist_id)
+            con.commit()
 
-            except Exception:
-                logging.warning(
-                    f'Something went wrong getting videos for {channel_url}')
+            # except Exception:
+            # logging.warning(
+            #     f'Something went wrong getting videos for {channel_url}')

@@ -4,7 +4,7 @@ import argparse
 from database import get_db, Artist
 from artists import load_artist_csv
 from channels import get_all_yt_channels
-from videos import get_all_yt_videos
+from videos import get_all_yt_videos, get_yt_videos
 
 
 if __name__ == '__main__':
