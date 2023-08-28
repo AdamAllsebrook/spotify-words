@@ -65,6 +65,11 @@ class Artist:
         cur.execute(' SELECT * FROM artist')
         return Artist.sql_result_to_df(cur.fetchall())
 
+    def get_by_id(cur, artist_id):
+        cur.execute(
+            f'SELECT * FROM artist WHERE {Artist.ID} = ?', (artist_id,))
+        return Artist.sql_result_to_df(cur.fetchall())
+
     def get_by_spotify(cur, spotify_uri):
         cur.execute(
             f'SELECT * FROM artist WHERE {Artist.SPOTIFY} = ?',
@@ -132,8 +137,12 @@ class Video:
 
     def save_many(cur, videos_df):
         cur.executemany(
-            '''INSERT INTO video (artist_id, title, youtube_url, updated_at)
-               VALUES (?, ?, ?, datetime('2001-01-01'))''',
+            f'''INSERT INTO video (
+                {Video.ARTIST_ID},
+                {Video.TITLE},
+                {Video.YOUTUBE},
+                {Video.UPDATED})
+            VALUES (?, ?, ?, datetime('2001-01-01'))''',
             videos_df[[Video.ARTIST_ID, Video.TITLE,
                        Video.YOUTUBE]].itertuples(index=False)
         )
