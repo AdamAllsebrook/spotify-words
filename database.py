@@ -101,6 +101,14 @@ class Artist:
             (name, spotify_uri, youtube_url)
         )
 
+    def set_youtube(cur, artist_id, youtube_url):
+        # i couldn't get passing args in a tuple to work, idk why
+        cur.execute(
+            f'''UPDATE artist
+               SET {Artist.YOUTUBE} = "{youtube_url}"
+               WHERE id = {artist_id}'''
+        )
+
     def set_updated(cur, artist_id):
         cur.execute(
             f'''UPDATE artist
@@ -153,3 +161,4 @@ class Comment:
     VIDEO_ID = 'video_id'
     CONTENT = 'content'
     UPDATED = 'updated_at'
+

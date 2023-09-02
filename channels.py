@@ -10,7 +10,10 @@ from database import Artist, get_db
 
 def find_youtube_channel(artist_name, options=None):
     SEARCH_URL = 'https://www.youtube.com/results?search_query=%s'
-    ANCHOR_SELECTOR = 'a.channel-link, .ytd-secondary-search-container-renderer a'
+    # selector for right sidebar channel link
+    MUSIC_CHANNEL_SELECTOR = '.ytd-secondary-search-container-renderer a'
+    # selector for top search result channel link
+    CHANNEL_SELECTOR = 'a.channel-link'
 
     artist_name = artist_name.replace('&', '%26')
     artist_name += ' music'
@@ -20,9 +23,17 @@ def find_youtube_channel(artist_name, options=None):
         driver.get(SEARCH_URL % artist_name)
 
         wait.until(EC.presence_of_element_located(
-            (By.CSS_SELECTOR, ANCHOR_SELECTOR)))
-        anchor_tag = driver.find_element(By.CSS_SELECTOR, ANCHOR_SELECTOR)
-        return anchor_tag.get_attribute('href')
+            (By.CSS_SELECTOR,
+             ','.join([CHANNEL_SELECTOR, MUSIC_CHANNEL_SELECTOR]))
+        ))
+
+        music_channel_anchor = driver.find_element(
+            By.CSS_SELECTOR, MUSIC_CHANNEL_SELECTOR)
+        if music_channel_anchor is not None:
+            return music_channel_anchor.get_attribute('href')
+
+        channel_anchor = driver.find_element(By.CSS_SELECTOR, CHANNEL_SELECTOR)
+        return channel_anchor.get_attribute('href')
 
 
 if __name__ == '__main__':
@@ -31,6 +42,7 @@ if __name__ == '__main__':
     parser.add_argument('--artist-name', type=str)
     parser.add_argument('--spotify-uri', type=str)
     parser.add_argument('--max-retries', type=int, default=3)
+    parser.add_argument('--overwrite', action=argparse.BooleanOptionalAction)
 
     args = parser.parse_args()
 
@@ -40,7 +52,9 @@ if __name__ == '__main__':
 
     con, cur = get_db(args.db_path)
     artists = Artist.get_by_spotify(cur, args.spotify_uri)
-    if artists.shape[0] > 0 and artists[Artist.YOUTUBE].iloc[0] is not None:
+    is_in_database = (artists.shape[0] > 0
+                      and artists[Artist.YOUTUBE].iloc[0] is not None)
+    if is_in_database and not args.overwrite:
         print(f'{args.artist_name} already in database')
     else:
         for n in range(args.max_retries):
@@ -54,6 +68,9 @@ if __name__ == '__main__':
             print(
                 f'Could not find channel for {args.artist_name}', file=sys.stderr)
         else:
-            Artist.save(cur, args.artist_name, args.spotify_uri, url)
+            if is_in_database:
+                Artist.set_youtube(cur, artists.index[0], url)
+            else:
+                Artist.save(cur, args.artist_name, args.spotify_uri, url)
             con.commit()
             print(f'Found channel for {args.artist_name}: {url}')

@@ -8,15 +8,20 @@ import argparse
 
 
 def screenshot_youtube_channel(url, path, options=None):
+    CHANNEL_NAME = '#channel-name'
+    COOKIES_REJECT = "//button[@aria-label='Reject all']"
     with Chrome(options=options) as driver:
-        wait = WebDriverWait(driver, 5)
+        wait = WebDriverWait(driver, 10)
         driver.get(url)
 
-        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'body')))
-        cookies_reject = driver.find_element(
-            By.XPATH, "//button[@aria-label='Reject all']")
-        cookies_reject.click()
-        time.sleep(6)
+        cookies_reject = wait.until(EC.element_to_be_clickable(
+            (By.XPATH, COOKIES_REJECT)))
+
+        if cookies_reject is not None:
+            cookies_reject.click()
+
+        wait.until(EC.presence_of_element_located(
+            (By.CSS_SELECTOR, CHANNEL_NAME)))
 
         driver.save_screenshot(path)
         print(f"Screenshot saved to {path}")
