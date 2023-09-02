@@ -3,3 +3,6 @@ cat datasets/artists.csv | parallel --jobs 4 --colsep , python channels.py --db-
 
 For getting videos for channels from the db:
 sqlite3 datasets/db.sqlite "select id from artist where updated_at < datetime('now', '-28 day')" | parallel --jobs 4 --colsep , python videos.py --db-path=datasets/db.sqlite --artist-id={1}
+
+Screenshot youtube channel pages for validation:
+sqlite3 datasets/db.sqlite ".mode csv" "select id, name, youtube_url from artist" | parallel --jobs 8 --colsep , python screenshot_channel.py --path=datasets/channel_images/{1},{2}.png --url={3}
