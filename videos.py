@@ -4,11 +4,29 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 import pandas as pd
 import time
 from database import Artist, Video, get_db
 import argparse
 import sys
+
+
+# find all elements matching selector in a scrollable page
+def find_all_in_scrollable(driver, selector, max_wait_time):
+    last_len = None
+    last_different_len_time = time.time()
+    while True:
+        elements = driver.find_elements(By.CSS_SELECTOR, selector)
+        if len(elements) == last_len:
+            if time.time() - last_different_len_time > max_wait_time:
+                break
+        else:
+            last_different_len_time = time.time()
+        last_len = len(elements)
+        driver.find_element(By.TAG_NAME, 'body').send_keys(Keys.END)
+        time.sleep(0.1)
+    return elements
 
 
 def find_youtube_videos(url, options=None):
@@ -19,32 +37,57 @@ def find_youtube_videos(url, options=None):
     video_urls = []
     video_titles = []
     with Chrome(options=options) as driver:
-        wait = WebDriverWait(driver, 3)
+        wait = WebDriverWait(driver, 5)
         driver.get(VIDEOS_URL % url)
 
-        cookies_reject = driver.find_element(
-            By.XPATH, "//button[@aria-label='Reject all']")
+        cookies_reject = wait.until(EC.presence_of_element_located(
+            (By.XPATH, "//button[@aria-label='Reject all']")))
         cookies_reject.click()
-        time.sleep(5)
+        time.sleep(3)
 
-        last_videos_len = None
-        while len(video_urls) != last_videos_len:
-            last_videos_len = len(video_urls)
-            wait.until(EC.presence_of_element_located(
-                (By.TAG_NAME, 'body'))).send_keys(Keys.END)
+        videos = find_all_in_scrollable(driver, VIDEO_SELECTOR, 3)
+        for video in videos:
+            anchor_tag = video.find_element(By.CSS_SELECTOR, ANCHOR_SELECTOR)
+            url = anchor_tag.get_attribute('href')
+            title = video.find_element(By.CSS_SELECTOR, TITLE_SELECTOR).text
 
-            for video in driver.find_elements(By.CSS_SELECTOR, VIDEO_SELECTOR):
-                anchor_tag = video.find_element(
-                    By.CSS_SELECTOR, ANCHOR_SELECTOR)
-                link = anchor_tag.get_attribute('href')
-                if link not in video_urls:
-                    video_urls.append(link)
+            video_urls.append(url)
+            video_titles.append(title)
 
-                    title = video.find_element(
-                        By.CSS_SELECTOR, TITLE_SELECTOR).text
-                    video_titles.append(title)
+    return list(zip(video_urls, video_titles))
 
-            time.sleep(1)
+
+# find videos linked in the artist sidebar when searching for the artist
+# in future can extend this to include playlists linked here
+def find_youtube_music_videos(artist_name, options=None):
+    SEARCH_URL = 'https://www.youtube.com/results?search_query=%s'
+    VIDEO_SELECTOR = '''.ytd-two-column-search-results-renderer
+ytd-watch-card-compact-video-renderer.ytd-vertical-watch-card-list-renderer'''
+    ANCHOR_SELECTOR = 'a'  # .yt-simple-endpoint'
+    TITLE_SELECTOR = '.title'
+
+    video_urls = []
+    video_titles = []
+    with Chrome(options=options) as driver:
+        wait = WebDriverWait(driver, 5)
+        driver.get(SEARCH_URL % artist_name)
+
+        try:
+            videos = wait.until(EC.presence_of_all_elements_located(
+                (By.CSS_SELECTOR, VIDEO_SELECTOR)))
+        except TimeoutException:
+            return []
+
+        for video in videos:
+            title = video.find_element(By.CSS_SELECTOR, TITLE_SELECTOR).text
+            anchor_tag = video.find_element(By.CSS_SELECTOR, ANCHOR_SELECTOR)
+            url = anchor_tag.get_attribute('href')
+            # remove unnecessary query params
+            if '&' in url:
+                url = url[:url.find('&')]
+
+            video_urls.append(url)
+            video_titles.append(title)
 
     return list(zip(video_urls, video_titles))
 
@@ -71,13 +114,22 @@ if __name__ == '__main__':
             try:
                 videos = find_youtube_videos(
                     artist[Artist.YOUTUBE], options=options)
+                urls = [url for (url, title) in videos]
+
+                music_videos = find_youtube_music_videos(
+                    artist[Artist.NAME], options=options)
+
+                # join two sources of videos
+                for (url, title) in music_videos:
+                    if url not in urls:
+                        videos.append((url, title))
                 break
             except Exception:
                 videos = None
 
         if videos is None:
             print(
-                f'Could not find videos for {args.youtube_url}', file=sys.stderr)
+                f'Could not find videos for {artist[Artist.NAME]}', file=sys.stderr)
 
         else:
             videos_in_db = Video.get_by_artist(cur, args.artist_id)
