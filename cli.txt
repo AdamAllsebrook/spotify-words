@@ -6,3 +6,7 @@ sqlite3 datasets/db.sqlite "select id from artist where updated_at < datetime('n
 
 Screenshot youtube channel pages for validation:
 sqlite3 datasets/db.sqlite ".mode csv" "select id, name, youtube_url from artist" | parallel --jobs 8 --colsep , python screenshot_channel.py --path=datasets/channel_images/{1},{2}.png --url={3}
+
+Get comments
+sqlite3 datasets/db.sqlite "select id from video where updated_at < datetime('now', '-28 day') limit 10000" | parallel --jobs 8 --colsep , python comments.py --db-path=datasets/db.sqlite --video-id={1} --max-comments=100
+

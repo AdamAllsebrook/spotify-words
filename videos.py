@@ -13,17 +13,20 @@ import sys
 
 
 # find all elements matching selector in a scrollable page
-def find_all_in_scrollable(driver, selector, max_wait_time):
+def find_all_in_scrollable(driver, selector, max_wait_time, max_elements=None):
     last_len = None
     last_different_len_time = time.time()
     while True:
         elements = driver.find_elements(By.CSS_SELECTOR, selector)
+        if max_elements is not None and len(elements) >= max_elements:
+            break
         if len(elements) == last_len:
             if time.time() - last_different_len_time > max_wait_time:
                 break
         else:
             last_different_len_time = time.time()
         last_len = len(elements)
+
         driver.find_element(By.TAG_NAME, 'body').send_keys(Keys.END)
         time.sleep(0.1)
     return elements

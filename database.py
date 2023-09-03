@@ -136,6 +136,11 @@ class Video:
         df.set_index(Video.ID, inplace=True)
         return df
 
+    def get_by_id(cur, video_id):
+        cur.execute(
+            f'SELECT * FROM video WHERE {Video.ID} = ?', (video_id,))
+        return Video.sql_result_to_df(cur.fetchall())
+
     def get_by_artist(cur, artist_id):
         cur.execute(f'''
     SELECT * FROM video
@@ -155,6 +160,14 @@ class Video:
                        Video.YOUTUBE]].itertuples(index=False)
         )
 
+    def set_updated(cur, video_id):
+        cur.execute(
+            f'''UPDATE video
+               SET {Video.UPDATED} = datetime('now')
+               WHERE id = ?''',
+            (video_id,)
+        )
+
 
 class Comment:
     ID = 'id'
@@ -162,3 +175,32 @@ class Comment:
     CONTENT = 'content'
     UPDATED = 'updated_at'
 
+    def sql_result_to_df(db_items):
+        df = pd.DataFrame(db_items, columns=[
+            Comment.ID,
+            Comment.VIDEO_ID,
+            Comment.CONTENT,
+            Comment.UPDATED
+        ])
+        df.set_index(Comment.ID, inplace=True)
+        return df
+
+    def get_all(cur):
+        cur.execute('SELECT * FROM comment')
+        return Comment.sql_result_to_df(cur.fetchall())
+
+    def get_by_video(cur, video_id):
+        cur.execute(f''' SELECT * FROM comment WHERE {Comment.VIDEO_ID} = ?''',
+                    (video_id,))
+        return Comment.sql_result_to_df(cur.fetchall())
+
+    def save_many(cur, comments_df):
+        cur.executemany(
+            f'''INSERT INTO comment (
+                {Comment.VIDEO_ID},
+                {Comment.CONTENT},
+                {Comment.UPDATED})
+            VALUES (?, ?, datetime('2001-01-01'))''',
+            comments_df[[Comment.VIDEO_ID, Comment.CONTENT]
+                        ].itertuples(index=False)
+        )
