@@ -84,9 +84,10 @@ if __name__ == '__main__':
                         Comment.CONTENT: comment
                     })
 
-            new_comments_df = pd.DataFrame(
-                rows, columns=[Comment.VIDEO_ID, Comment.CONTENT, Comment.LANGUAGE])
-            Comment.save_many(cur, new_comments_df)
-            Video.set_updated(cur, args.video_id)
-            con.commit()
+            if len(rows) > 0:
+                new_comments_df = pd.DataFrame(
+                    rows, columns=[Comment.VIDEO_ID, Comment.CONTENT, Comment.LANGUAGE])
+                Comment.save_many(cur, new_comments_df)
+                Video.set_updated(cur, args.video_id)
+                con.commit()
             print(f'Found {len(rows)} new comments for {video[Video.TITLE]}')
