@@ -7,6 +7,9 @@ import sys
 import time
 from database import Video, Comment, get_db
 from videos import find_all_in_scrollable
+import spacy
+from spacy.language import Language
+from spacy_language_detection import LanguageDetector
 
 
 def find_youtube_comments(url, max_comments, options=None):
@@ -21,6 +24,18 @@ def find_youtube_comments(url, max_comments, options=None):
         comments = [comment.text for comment in comments]
 
     return comments
+
+
+def detect_languages(texts):
+    def get_lang_detector(nlp, name):
+        return LanguageDetector(seed=42)
+
+    nlp_model = spacy.load("en_core_web_sm")
+    Language.factory("language_detector", func=get_lang_detector)
+    nlp_model.add_pipe('language_detector', last=True)
+
+    languages = [nlp_model(text)._.language['language'] for text in texts]
+    return languages
 
 
 if __name__ == '__main__':
@@ -57,16 +72,18 @@ if __name__ == '__main__':
 
         else:
             comments_in_db = Comment.get_by_video(cur, args.video_id)
+            languages = detect_languages(comments)
             rows = []
-            for comment in comments:
+            for (comment, language) in zip(comments, languages):
                 if comment not in comments_in_db[Comment.CONTENT].values:
                     rows.append({
                         Comment.VIDEO_ID: args.video_id,
+                        Comment.LANGUAGE: language,
                         Comment.CONTENT: comment
                     })
 
             new_comments_df = pd.DataFrame(
-                rows, columns=[Comment.VIDEO_ID, Comment.CONTENT])
+                rows, columns=[Comment.VIDEO_ID, Comment.CONTENT, Comment.LANGUAGE])
             Comment.save_many(cur, new_comments_df)
             Video.set_updated(cur, args.video_id)
             con.commit()

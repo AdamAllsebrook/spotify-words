@@ -173,6 +173,7 @@ class Comment:
     ID = 'id'
     VIDEO_ID = 'video_id'
     CONTENT = 'content'
+    LANGUAGE = 'language'
     UPDATED = 'updated_at'
 
     def sql_result_to_df(db_items):
@@ -180,6 +181,7 @@ class Comment:
             Comment.ID,
             Comment.VIDEO_ID,
             Comment.CONTENT,
+            Comment.LANGUAGE,
             Comment.UPDATED
         ])
         df.set_index(Comment.ID, inplace=True)
@@ -187,6 +189,19 @@ class Comment:
 
     def get_all(cur):
         cur.execute('SELECT * FROM comment')
+        return Comment.sql_result_to_df(cur.fetchall())
+
+    def get_by_artist(cur, artist_id):
+        cur.execute(f'''SELECT
+                    comment.{Comment.ID},
+                    {Comment.VIDEO_ID},
+                    {Comment.CONTENT},
+                    {Comment.LANGUAGE},
+                    comment.{Comment.UPDATED} FROM comment
+                    LEFT JOIN video ON
+                        comment.{Comment.VIDEO_ID} = video.{Video.ID}
+                    WHERE video.{Video.ARTIST_ID} = ?''',
+                    (artist_id,))
         return Comment.sql_result_to_df(cur.fetchall())
 
     def get_by_video(cur, video_id):
@@ -199,8 +214,9 @@ class Comment:
             f'''INSERT INTO comment (
                 {Comment.VIDEO_ID},
                 {Comment.CONTENT},
+                {Comment.LANGUAGE},
                 {Comment.UPDATED})
-            VALUES (?, ?, datetime('2001-01-01'))''',
-            comments_df[[Comment.VIDEO_ID, Comment.CONTENT]
+            VALUES (?, ?, ?, datetime('2001-01-01'))''',
+            comments_df[[Comment.VIDEO_ID, Comment.CONTENT, Comment.LANGUAGE]
                         ].itertuples(index=False)
         )
