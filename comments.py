@@ -62,6 +62,8 @@ if __name__ == '__main__':
             try:
                 comments = find_youtube_comments(
                     video[Video.YOUTUBE], args.max_comments, options=options)
+                if len(comments) == 0:
+                    raise Exception('No comments found')
                 break
             except Exception:
                 comments = None
