@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS video (
     {Video.ARTIST_ID} INTEGER NOT NULL,
     {Video.TITLE} TEXT NOT NULL,
     {Video.YOUTUBE} TEXT NOT NULL,
+    {Video.VIEWS} BIGINT NOT NULL,
     {Video.UPDATED} TEXT NOT NULL,
     FOREIGN KEY ({Video.ARTIST_ID}) REFERENCES artist ({Artist.ID})
 );
@@ -27,6 +28,7 @@ CREATE TABLE IF NOT EXISTS comment (
     {Comment.ID} INTEGER PRIMARY KEY,
     {Comment.VIDEO_ID} INTEGER NOT NULL,
     {Comment.CONTENT} TEXT NOT NULL,
+    {Comment.LANGUAGE} TEXT NOT NULL,
     {Comment.UPDATED} TEXT NOT NULL,
     FOREIGN KEY ({Comment.VIDEO_ID}) REFERENCES video ({Video.ID})
 );
@@ -123,6 +125,7 @@ class Video:
     ARTIST_ID = 'artist_id'
     TITLE = 'title'
     YOUTUBE = 'youtube_url'
+    VIEWS = 'views'
     UPDATED = 'updated_at'
 
     def sql_result_to_df(db_items):
@@ -131,6 +134,7 @@ class Video:
             Video.ARTIST_ID,
             Video.TITLE,
             Video.YOUTUBE,
+            Video.VIEWS,
             Video.UPDATED
         ])
         df.set_index(Video.ID, inplace=True)
@@ -154,10 +158,11 @@ class Video:
                 {Video.ARTIST_ID},
                 {Video.TITLE},
                 {Video.YOUTUBE},
+                {Video.VIEWS},
                 {Video.UPDATED})
-            VALUES (?, ?, ?, datetime('2001-01-01'))''',
+            VALUES (?, ?, ?, ?, datetime('2001-01-01'))''',
             videos_df[[Video.ARTIST_ID, Video.TITLE,
-                       Video.YOUTUBE]].itertuples(index=False)
+                       Video.YOUTUBE, Video.VIEWS]].itertuples(index=False)
         )
 
     def set_updated(cur, video_id):
@@ -200,7 +205,7 @@ class Comment:
                     comment.{Comment.UPDATED} FROM comment
                     LEFT JOIN video ON
                         comment.{Comment.VIDEO_ID} = video.{Video.ID}
-                    WHERE video.{Video.ARTIST_ID} = ?''',
+                    WHERE video.{Video.ARTIST_ID} = ? LIMIT 1000''',
                     (artist_id,))
         return Comment.sql_result_to_df(cur.fetchall())
 
