@@ -1,10 +1,8 @@
-
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver import Chrome
 import pandas as pd
 import argparse
 import sys
-import time
 from database import Video, Comment, get_db
 from videos import find_all_in_scrollable
 import spacy
@@ -17,10 +15,9 @@ def find_youtube_comments(url, max_comments, options=None):
     comments = []
     with Chrome(options=options) as driver:
         driver.get(url)
-        time.sleep(5)
 
         comments = find_all_in_scrollable(
-            driver, COMMENT_SELECTOR, 15, max_elements=max_comments)
+            driver, COMMENT_SELECTOR, 60, max_elements=max_comments)
         comments = [comment.text for comment in comments]
 
     return comments
