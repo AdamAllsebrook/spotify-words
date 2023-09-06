@@ -4,7 +4,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import pandas as pd
 import time
 from database import Artist, Video, get_db
@@ -68,13 +68,18 @@ def find_youtube_videos(url, options=None):
         cookies_reject.click()
         time.sleep(3)
 
-        video_elements = find_all_in_scrollable(driver, VIDEO_SELECTOR, 3)
+        video_elements = find_all_in_scrollable(driver, VIDEO_SELECTOR, 3, max_elements=800)
         for video_el in video_elements:
             anchor_tag = video_el.find_element(
                 By.CSS_SELECTOR, ANCHOR_SELECTOR)
             url = anchor_tag.get_attribute('href')
             title = video_el.find_element(By.CSS_SELECTOR, TITLE_SELECTOR).text
-            views = video_el.find_element(By.CSS_SELECTOR, VIEWS_SELECTOR).text
+
+            try:
+                views = video_el.find_element(By.CSS_SELECTOR, VIEWS_SELECTOR).text
+            except NoSuchElementException:
+                # some channels (Maroon 5) have premium videos, which don't list the view count
+                continue
 
             video = VideoData(url, title, views_to_int(views))
             videos.append(video)
@@ -156,8 +161,9 @@ if __name__ == '__main__':
                 for video in music_videos:
                     if video.url not in urls:
                         videos.append(video)
-                    break
-            except Exception:
+                break
+            except Exception as e:
+                raise
                 videos = None
 
         if videos is None:
