@@ -10,6 +10,21 @@ import spacy
 from spacy.language import Language
 from spacy_language_detection import LanguageDetector
 from common import options, find_all_in_scrollable
+import logging
+import os
+
+dir_path = os.path.dirname(os.path.realpath(__file__))
+
+logging.basicConfig(
+    level=logging.INFO,
+    handlers=[
+        logging.FileHandler('%s/youtube-scraper-spotify-comments.log'
+                            % dir_path),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
+log = logging.getLogger(__name__)
 
 
 def find_youtube_comments_with_retries(url, max_comments, max_retries):
@@ -19,14 +34,15 @@ def find_youtube_comments_with_retries(url, max_comments, max_retries):
     Raises an exception after max_retries.
     """
     for n in range(max_retries):
+        log.info('Finding comments for %s, attempt %d', url, n + 1)
         try:
             return find_youtube_comments(
                 url,
                 max_comments,
                 options=options
             )
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug('Error finding comments for %s: %s', url, e)
 
     raise Exception('Could not find comments for %s after %d retries'
                     % (url, max_retries))
@@ -54,14 +70,17 @@ def find_youtube_comments(url, max_comments, options=None):
 
         if len(comments) == 0:
             body = driver.find_element(By.TAG_NAME, 'body')
-            if 'Comments are turned off.' in body.text:
+            if 'Comments are turned off' in body.text:
+                log.info('Comments are turned off for %s', url)
                 return []
             if '\n0 Comments' in body.text:
+                log.info('%s has 0 comments', url)
                 return []
             raise Exception(
                 'Video URL %s has no comments, but was expected to have some'
                 % url)
 
+    log.info('Found %d comments for %s', len(comments), url)
     return comments
 
 
@@ -101,7 +120,7 @@ def main(db_path, video_id, max_comments, max_retries):
 
     video = Video.get_by_id(cur, video_id)
     if video is None:
-        print(f'ID: {video_id} not found in database', file=sys.stderr)
+        log.error('ID: %s not found in database', video_id)
         return
 
     comments = find_youtube_comments_with_retries(
@@ -115,8 +134,8 @@ def main(db_path, video_id, max_comments, max_retries):
     Comment.save_many(cur, new_comments_df)
     Video.set_updated(cur, video_id)
     con.commit()
-    print('Found %d new comments for %s'
-          % (len(new_comments_df), video[Video.TITLE]))
+    log.info('Saved %d new comments for %s',
+             len(new_comments_df), video[Video.YOUTUBE])
 
 
 if __name__ == '__main__':
