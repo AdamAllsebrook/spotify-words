@@ -1,4 +1,3 @@
-import logging
 import pandas as pd
 from dataclasses import dataclass
 import sqlite3
@@ -40,7 +39,6 @@ def get_db(db_path):
     cur = con.cursor()
     schema = generate_schema()
     cur.executescript(schema)
-    logging.info(f'Init database at {db_path} with schema: {schema}')
     con.commit()
     return con, cur
 
@@ -70,7 +68,10 @@ class Artist:
     def get_by_id(cur, artist_id):
         cur.execute(
             f'SELECT * FROM artist WHERE {Artist.ID} = ?', (artist_id,))
-        return Artist.sql_result_to_df(cur.fetchall())
+        artists = Artist.sql_result_to_df(cur.fetchall())
+        if artists.shape[0] == 0:
+            return None
+        return artists.iloc[0]
 
     def get_by_spotify(cur, spotify_uri):
         cur.execute(
