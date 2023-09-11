@@ -1,9 +1,10 @@
+"""Methods for interacting with the database."""
 import pandas as pd
-from dataclasses import dataclass
 import sqlite3
 
 
 def generate_schema():
+    """Generate the SQL schema for the database."""
     return f'''
 CREATE TABLE IF NOT EXISTS artist (
     {Artist.ID} INTEGER PRIMARY KEY,
@@ -35,6 +36,7 @@ CREATE TABLE IF NOT EXISTS comment (
 
 
 def get_db(db_path):
+    """Get a connection to the database, creating it if necessary."""
     con = sqlite3.connect(db_path)
     cur = con.cursor()
     schema = generate_schema()
@@ -44,6 +46,8 @@ def get_db(db_path):
 
 
 class Artist:
+    """Methods for interacting with the artist table."""
+
     ID = 'id'
     NAME = 'name'
     SPOTIFY = 'spotify_uri'
@@ -51,6 +55,7 @@ class Artist:
     UPDATED = 'updated_at'
 
     def sql_result_to_df(db_items):
+        """Convert a SQL result to a pandas DataFrame."""
         df = pd.DataFrame(db_items, columns=[
             Artist.ID,
             Artist.NAME,
@@ -62,10 +67,12 @@ class Artist:
         return df
 
     def get_all(cur):
+        """Get all artists from the database."""
         cur.execute(' SELECT * FROM artist')
         return Artist.sql_result_to_df(cur.fetchall())
 
     def get_by_id(cur, artist_id):
+        """Get an artist by their ID."""
         cur.execute(
             f'SELECT * FROM artist WHERE {Artist.ID} = ?', (artist_id,))
         artists = Artist.sql_result_to_df(cur.fetchall())
@@ -74,6 +81,7 @@ class Artist:
         return artists.iloc[0]
 
     def get_by_spotify(cur, spotify_uri):
+        """Get artists by their Spotify URI."""
         cur.execute(
             f'SELECT * FROM artist WHERE {Artist.SPOTIFY} = ?',
             (spotify_uri,))
@@ -81,19 +89,14 @@ class Artist:
         return Artist.sql_result_to_df(cur.fetchall())
 
     def get_by_youtube(cur, youtube_channel):
+        """Get artists by their YouTube channel."""
         cur.execute(
             f'SELECT * FROM artist WHERE {Artist.YOUTUBE} = ?',
             (youtube_channel,))
         return Artist.sql_result_to_df(cur.fetchall())
 
-    def get_by_updated_days_ago(cur, days_ago):
-        cur.execute(f'''
-                    SELECT * FROM artist
-                    WHERE {Artist.UPDATED} < datetime('now', '-{days_ago} day')
-                    ''')
-        return Artist.sql_result_to_df(cur.fetchall())
-
     def save(cur, name, spotify_uri, youtube_url):
+        """Save an artist to the database."""
         cur.execute(
             f'''INSERT INTO artist (
                 {Artist.NAME},
@@ -105,6 +108,7 @@ class Artist:
         )
 
     def set_youtube(cur, artist_id, youtube_url):
+        """Set the YouTube channel for an artist."""
         # i couldn't get passing args in a tuple to work, idk why
         cur.execute(
             f'''UPDATE artist
@@ -113,6 +117,7 @@ class Artist:
         )
 
     def set_updated(cur, artist_id):
+        """Set the updated_at field for an artist."""
         cur.execute(
             f'''UPDATE artist
                SET {Artist.UPDATED} = datetime('now')
@@ -122,6 +127,8 @@ class Artist:
 
 
 class Video:
+    """Methods for interacting with the video table."""
+
     ID = 'id'
     ARTIST_ID = 'artist_id'
     TITLE = 'title'
@@ -130,6 +137,7 @@ class Video:
     UPDATED = 'updated_at'
 
     def sql_result_to_df(db_items):
+        """Convert a SQL result to a pandas DataFrame."""
         df = pd.DataFrame(db_items, columns=[
             Video.ID,
             Video.ARTIST_ID,
@@ -142,6 +150,7 @@ class Video:
         return df
 
     def get_by_id(cur, video_id):
+        """Get a video by its ID."""
         cur.execute(
             f'SELECT * FROM video WHERE {Video.ID} = ?', (video_id,))
         videos = Video.sql_result_to_df(cur.fetchall())
@@ -150,6 +159,7 @@ class Video:
         return videos.iloc[0]
 
     def get_by_artist(cur, artist_id):
+        """Get videos by their artist."""
         cur.execute(f'''
     SELECT * FROM video
     WHERE {Video.ARTIST_ID} = ?''',
@@ -157,6 +167,7 @@ class Video:
         return Video.sql_result_to_df(cur.fetchall())
 
     def save_many(cur, videos_df):
+        """Save many videos to the database."""
         cur.executemany(
             f'''INSERT INTO video (
                 {Video.ARTIST_ID},
@@ -170,6 +181,7 @@ class Video:
         )
 
     def set_updated(cur, video_id):
+        """Set the updated_at field for a video."""
         cur.execute(
             f'''UPDATE video
                SET {Video.UPDATED} = datetime('now')
@@ -179,6 +191,8 @@ class Video:
 
 
 class Comment:
+    """Methods for interacting with the comment table."""
+
     ID = 'id'
     VIDEO_ID = 'video_id'
     CONTENT = 'content'
@@ -186,6 +200,7 @@ class Comment:
     UPDATED = 'updated_at'
 
     def sql_result_to_df(db_items):
+        """Convert a SQL result to a pandas DataFrame."""
         df = pd.DataFrame(db_items, columns=[
             Comment.ID,
             Comment.VIDEO_ID,
@@ -197,10 +212,12 @@ class Comment:
         return df
 
     def get_all(cur):
+        """Get all comments from the database."""
         cur.execute('SELECT * FROM comment')
         return Comment.sql_result_to_df(cur.fetchall())
 
     def get_by_artist(cur, artist_id):
+        """Get comments by their artist."""
         cur.execute(f'''SELECT
                     comment.{Comment.ID},
                     {Comment.VIDEO_ID},
@@ -214,11 +231,13 @@ class Comment:
         return Comment.sql_result_to_df(cur.fetchall())
 
     def get_by_video(cur, video_id):
+        """Get comments by their video."""
         cur.execute(f''' SELECT * FROM comment WHERE {Comment.VIDEO_ID} = ?''',
                     (video_id,))
         return Comment.sql_result_to_df(cur.fetchall())
 
     def save_many(cur, comments_df):
+        """Save many comments to the database."""
         cur.executemany(
             f'''INSERT INTO comment (
                 {Comment.VIDEO_ID},
