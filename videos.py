@@ -19,7 +19,7 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 logging.basicConfig(
     level=logging.INFO,
     handlers=[
-        logging.FileHandler('%s/youtube-scraper-spotify-comments.log'
+        logging.FileHandler('%s/youtube-scraper-spotify-videos.log'
                             % dir_path),
         logging.StreamHandler(sys.stdout)
     ]
