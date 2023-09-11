@@ -1,46 +1,44 @@
-from selenium.webdriver.chrome.options import Options
+"""Scrape youtube videos for an artist."""
 from selenium.webdriver import Chrome
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import pandas as pd
 import time
 from database import Artist, Video, get_db
+from common import options, find_all_in_scrollable
 import argparse
 import sys
 from dataclasses import dataclass
+import logging
+import os
+
+dir_path = os.path.dirname(os.path.realpath(__file__))
+
+logging.basicConfig(
+    level=logging.INFO,
+    handlers=[
+        logging.FileHandler('%s/youtube-scraper-spotify-comments.log'
+                            % dir_path),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
 class VideoData:
+    """Store video data before it is inserted into the database."""
+
     url: str
     title: str
     views: int
 
 
-# find all elements matching selector in a scrollable page
-def find_all_in_scrollable(driver, selector, max_wait_time, max_elements=None):
-    last_len = None
-    last_different_len_time = time.time()
-    while True:
-        elements = driver.find_elements(By.CSS_SELECTOR, selector)
-        if max_elements is not None and len(elements) >= max_elements:
-            break
-        if len(elements) == last_len:
-            if time.time() - last_different_len_time > max_wait_time:
-                break
-        else:
-            last_different_len_time = time.time()
-        last_len = len(elements)
-
-        driver.find_element(By.TAG_NAME, 'body').send_keys(Keys.END)
-        time.sleep(0.1)
-    return elements
-
-
 def views_to_int(views):
+    """Convert a string of views to an integer."""
     views = views[:views.find(' ')]
     if 'K' in views:
         return int(float(views.replace('K', '')) * 1_000)
@@ -51,24 +49,66 @@ def views_to_int(views):
     return int(views)
 
 
+def find_all_youtube_videos_with_retries(artist, max_retries):
+    """
+    Find all youtube videos for an artist, retrying if necessary.
+
+    Raises an exception after max_retries.
+    """
+    for n in range(max_retries):
+        log.info('Finding videos for %s, attempt %d',
+                 artist[Artist.NAME], n + 1)
+        try:
+            videos = find_youtube_videos(
+                artist[Artist.YOUTUBE], options=options)
+            log.info('Found %d videos for %s',
+                     len(videos), artist[Artist.NAME])
+            urls = [video.url for video in videos]
+
+            music_videos = find_youtube_music_videos(
+                artist[Artist.NAME], options=options)
+            log.info('Found %d music videos for %s',
+                     len(music_videos), artist[Artist.NAME])
+
+            # join two sources of videos
+            for video in music_videos:
+                if video.url not in urls:
+                    videos.append(video)
+            log.info('Found %d total videos for %s',
+                     len(videos), artist[Artist.NAME])
+            return videos
+
+        except Exception as e:
+            log.debug('Error finding videos for %s: %s',
+                      artist[Artist.NAME], e)
+
+    raise Exception('Could not find videos for %s after %d retries'
+                    % (artist[Artist.NAME], max_retries))
+
+
 def find_youtube_videos(url, options=None):
+    """Find youtube videos for a channel."""
     VIDEOS_URL = '%s/videos'
     VIDEO_SELECTOR = '#content.ytd-rich-item-renderer'
     ANCHOR_SELECTOR = 'a#thumbnail'
     TITLE_SELECTOR = '#video-title'
     VIEWS_SELECTOR = '#metadata-line span'
+    MAX_VIDEOS = 800
+    STARTUP_WAIT_TIME = 3
+    MAX_WAIT_TIME = 10
 
     videos = []
     with Chrome(options=options) as driver:
-        wait = WebDriverWait(driver, 5)
+        wait = WebDriverWait(driver, MAX_WAIT_TIME)
         driver.get(VIDEOS_URL % url)
 
         cookies_reject = wait.until(EC.presence_of_element_located(
             (By.XPATH, "//button[@aria-label='Reject all']")))
         cookies_reject.click()
-        time.sleep(3)
+        time.sleep(STARTUP_WAIT_TIME)
 
-        video_elements = find_all_in_scrollable(driver, VIDEO_SELECTOR, 3, max_elements=800)
+        video_elements = find_all_in_scrollable(
+            driver, VIDEO_SELECTOR, MAX_WAIT_TIME, max_elements=MAX_VIDEOS)
         for video_el in video_elements:
             anchor_tag = video_el.find_element(
                 By.CSS_SELECTOR, ANCHOR_SELECTOR)
@@ -76,9 +116,11 @@ def find_youtube_videos(url, options=None):
             title = video_el.find_element(By.CSS_SELECTOR, TITLE_SELECTOR).text
 
             try:
-                views = video_el.find_element(By.CSS_SELECTOR, VIEWS_SELECTOR).text
+                views = video_el.find_element(
+                    By.CSS_SELECTOR, VIEWS_SELECTOR).text
             except NoSuchElementException:
-                # some channels (Maroon 5) have premium videos, which don't list the view count
+                # some channels (Maroon 5) have premium video,
+                # which don't list the view count
                 continue
 
             video = VideoData(url, title, views_to_int(views))
@@ -88,21 +130,18 @@ def find_youtube_videos(url, options=None):
 
 
 def find_youtube_music_videos(artist_name, options=None):
-    """
-    find videos linked in the artist sidebar when searching for the artist
-    in future can extend this to include playlists linked here
-    """
-
+    """Find videos linked in the artist sidebar when searching for the artist."""
     SEARCH_URL = 'https://www.youtube.com/results?search_query=%s'
     VIDEO_SELECTOR = '''.ytd-two-column-search-results-renderer
     ytd-watch-card-compact-video-renderer.ytd-vertical-watch-card-list-renderer'''
     ANCHOR_SELECTOR = 'a'  # .yt-simple-endpoint'
     TITLE_SELECTOR = '.title'
     VIEWS_SELECTOR = '.subtitle'
+    MAX_WAIT_TIME = 10
 
     videos = []
     with Chrome(options=options) as driver:
-        wait = WebDriverWait(driver, 5)
+        wait = WebDriverWait(driver, MAX_WAIT_TIME)
         driver.get(SEARCH_URL % artist_name)
 
         try:
@@ -130,6 +169,45 @@ def find_youtube_music_videos(artist_name, options=None):
     return videos
 
 
+def get_dataframe(artist_id, videos):
+    """Convert a list of VideoData objects to a dataframe."""
+    rows = [
+        {
+            Video.ARTIST_ID: artist_id,
+            Video.TITLE: video.title,
+            Video.YOUTUBE: video.url,
+            Video.VIEWS: video.views
+        }
+        for video in videos
+    ]
+
+    return pd.DataFrame(rows, columns=[
+        Video.ARTIST_ID, Video.YOUTUBE, Video.TITLE, Video.VIEWS
+    ])
+
+
+def main(db_path, artist_id, max_retries):
+    """Find all youtube videos for an artist and save them to the database."""
+    con, cur = get_db(db_path)
+
+    artist = Artist.get_by_id(cur, artist_id)
+    if artist is None:
+        log.error('ID: %s not found in database', artist_id)
+        return
+
+    videos = find_all_youtube_videos_with_retries(artist, max_retries)
+
+    df = get_dataframe(artist_id, videos)
+    videos_in_db = Video.get_by_artist(cur, artist_id)
+    new_videos_df = df[~df[Video.YOUTUBE].isin(videos_in_db[Video.YOUTUBE])]
+
+    Video.save_many(cur, new_videos_df)
+    Artist.set_updated(cur, artist_id)
+    con.commit()
+    log.info('Saved %d new videos for %s',
+             new_videos_df.shape[0], artist[Artist.NAME])
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--db-path', type=str)
@@ -138,54 +216,4 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    options = Options()
-    options.add_argument('--headless=new')
-    options.add_argument('--window-size=2560,1440')
-
-    con, cur = get_db(args.db_path)
-    artists = Artist.get_by_id(cur, args.artist_id)
-    if artists.shape[0] == 0:
-        print(f'ID: {args.artist_id} not found in database', file=sys.stderr)
-    else:
-        artist = artists.iloc[0]
-        for n in range(args.max_retries):
-            try:
-                videos = find_youtube_videos(
-                    artist[Artist.YOUTUBE], options=options)
-                urls = [video.url for video in videos]
-
-                music_videos = find_youtube_music_videos(
-                    artist[Artist.NAME], options=options)
-
-                # join two sources of videos
-                for video in music_videos:
-                    if video.url not in urls:
-                        videos.append(video)
-                break
-            except Exception as e:
-                raise
-                videos = None
-
-        if videos is None:
-            print(
-                f'Could not find videos for {artist[Artist.NAME]}', file=sys.stderr)
-
-        else:
-            videos_in_db = Video.get_by_artist(cur, args.artist_id)
-            rows = []
-            for video in videos:
-                if video.url not in videos_in_db[Video.YOUTUBE].values:
-                    rows.append({
-                        Video.ARTIST_ID: args.artist_id,
-                        Video.TITLE: video.title,
-                        Video.YOUTUBE: video.url,
-                        Video.VIEWS: video.views
-                    })
-
-            new_videos_df = pd.DataFrame(rows, columns=[
-                Video.ARTIST_ID, Video.YOUTUBE, Video.TITLE, Video.VIEWS
-            ])
-            Video.save_many(cur, new_videos_df)
-            Artist.set_updated(cur, args.artist_id)
-            con.commit()
-            print(f'Found {len(rows)} new videos for {artist[Artist.NAME]}')
+    main(args.db_path, args.artist_id, args.max_retries)
