@@ -8,5 +8,19 @@ Screenshot youtube channel pages for validation:
 sqlite3 datasets/db.sqlite ".mode csv" "select id, name, youtube_url from artist" | parallel --jobs 8 --colsep , python screenshot_channel.py --path=datasets/channel_images/{1},{2}.png --url={3}
 
 Get comments
-sqlite3 datasets/db.sqlite "select id from video where updated_at < datetime('now', '-28 day') limit 10000" | parallel --jobs 8 --colsep , python comments.py --db-path=datasets/db.sqlite --video-id={1} --max-comments=100
+sqlite3 datasets/db.sqlite "WITH RankedVideos AS ( SELECT v.id as video_id, v.updated_at as updated_at, ROW_NUMBER() OVER(PARTITION BY a.id ORDER BY v.views DESC) AS row_num FROM artist a JOIN video v ON a.id = v.artist_id) SELECT video_id FROM RankedVideos WHERE row_num <= 10 and updated_at < DATETIME('now', '-28 days')" | parallel --jobs 5 --colsep , python comments.py --db-path=datasets/db.sqlite --video-id={1} --max-comments=250
+
+
+# the comment sql query with newlines
+WITH RankedVideos AS (
+  SELECT
+    v.id as video_id,
+    v.updated_at as updated_at,
+    ROW_NUMBER() OVER(PARTITION BY a.id ORDER BY v.views DESC) AS row_num
+  FROM artist a
+  JOIN video v ON a.id = v.artist_id
+)
+SELECT video_id
+FROM RankedVideos
+WHERE row_num <= 10 and updated_at < DATETIME('now', '-28 days')
 
