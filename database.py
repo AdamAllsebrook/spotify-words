@@ -143,7 +143,10 @@ class Video:
     def get_by_id(cur, video_id):
         cur.execute(
             f'SELECT * FROM video WHERE {Video.ID} = ?', (video_id,))
-        return Video.sql_result_to_df(cur.fetchall())
+        videos = Video.sql_result_to_df(cur.fetchall())
+        if videos.shape[0] == 0:
+            return None
+        return videos.iloc[0]
 
     def get_by_artist(cur, artist_id):
         cur.execute(f'''
