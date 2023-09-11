@@ -5,7 +5,6 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import pandas as pd
-import time
 from database import Artist, Video, get_db
 from common import options, find_all_in_scrollable
 import argparse
@@ -49,18 +48,27 @@ def views_to_int(views):
     return int(views)
 
 
-def find_all_youtube_videos_with_retries(artist, max_retries):
+def find_all_youtube_videos_with_retries(artist, max_retries, screenshot):
     """
     Find all youtube videos for an artist, retrying if necessary.
 
     Raises an exception after max_retries.
     """
+    SCREENSHOT_PATH = '%s/datasets/channel-screenshots/%s.png'
+
     for n in range(max_retries):
         log.info('Finding videos for %s, attempt %d',
                  artist[Artist.NAME], n + 1)
         try:
+            if screenshot:
+                screenshot_path = SCREENSHOT_PATH % (
+                    dir_path,
+                    '%d,%s' % (artist[Artist.ID], artist[Artist.NAME])
+                )
+            else:
+                screenshot_path = None
             videos = find_youtube_videos(
-                artist[Artist.YOUTUBE], options=options)
+                artist[Artist.YOUTUBE], screenshot_path, options=options)
             log.info('Found %d videos for %s',
                      len(videos), artist[Artist.NAME])
             urls = [video.url for video in videos]
@@ -86,15 +94,15 @@ def find_all_youtube_videos_with_retries(artist, max_retries):
                     % (artist[Artist.NAME], max_retries))
 
 
-def find_youtube_videos(url, options=None):
+def find_youtube_videos(url, screenshot_path=None, options=None):
     """Find youtube videos for a channel."""
     VIDEOS_URL = '%s/videos'
+    CHANNEL_NAME = '#channel-name'
     VIDEO_SELECTOR = '#content.ytd-rich-item-renderer'
     ANCHOR_SELECTOR = 'a#thumbnail'
     TITLE_SELECTOR = '#video-title'
     VIEWS_SELECTOR = '#metadata-line span'
     MAX_VIDEOS = 800
-    STARTUP_WAIT_TIME = 3
     MAX_WAIT_TIME = 10
 
     videos = []
@@ -105,7 +113,12 @@ def find_youtube_videos(url, options=None):
         cookies_reject = wait.until(EC.presence_of_element_located(
             (By.XPATH, "//button[@aria-label='Reject all']")))
         cookies_reject.click()
-        time.sleep(STARTUP_WAIT_TIME)
+
+        wait.until(EC.presence_of_element_located(
+            (By.CSS_SELECTOR, CHANNEL_NAME)))
+
+        if screenshot_path is not None:
+            driver.save_screenshot(screenshot_path)
 
         video_elements = find_all_in_scrollable(
             driver, VIDEO_SELECTOR, MAX_WAIT_TIME, max_elements=MAX_VIDEOS)
@@ -186,7 +199,7 @@ def get_dataframe(artist_id, videos):
     ])
 
 
-def main(db_path, artist_id, max_retries):
+def main(db_path, artist_id, max_retries, screenshot):
     """Find all youtube videos for an artist and save them to the database."""
     con, cur = get_db(db_path)
 
@@ -195,7 +208,8 @@ def main(db_path, artist_id, max_retries):
         log.error('ID: %s not found in database', artist_id)
         return
 
-    videos = find_all_youtube_videos_with_retries(artist, max_retries)
+    videos = find_all_youtube_videos_with_retries(
+        artist, max_retries, screenshot)
 
     df = get_dataframe(artist_id, videos)
     videos_in_db = Video.get_by_artist(cur, artist_id)
@@ -213,7 +227,9 @@ if __name__ == '__main__':
     parser.add_argument('--db-path', type=str)
     parser.add_argument('--artist-id', type=str)
     parser.add_argument('--max-retries', type=int, default=3)
+    parser.add_argument(
+        '--screenshot', action=argparse.BooleanOptionalAction, default=False)
 
     args = parser.parse_args()
 
-    main(args.db_path, args.artist_id, args.max_retries)
+    main(args.db_path, args.artist_id, args.max_retries, args.screenshot)
