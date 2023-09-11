@@ -93,7 +93,7 @@ def main(db_path, artist_name, spotify_uri, max_retries, overwrite):
                  artist_name, url)
 
     con.commit()
-    log.info('Saved %s to database', artist_name, url)
+    log.info('Saved %s to database', artist_name)
 
 
 if __name__ == '__main__':
@@ -106,4 +106,5 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    main(args.db_path, args.artist_name, args.spotify_uri, args.max_retries)
+    main(args.db_path, args.artist_name, args.spotify_uri,
+         args.max_retries, args.overwrite)
