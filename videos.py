@@ -48,25 +48,20 @@ def views_to_int(views):
     return int(views)
 
 
-def find_all_youtube_videos_with_retries(artist, max_retries, screenshot):
+def find_all_youtube_videos_with_retries(artist, max_retries, screenshot_path):
     """
     Find all youtube videos for an artist, retrying if necessary.
 
     Raises an exception after max_retries.
     """
-    SCREENSHOT_PATH = '%s/datasets/channel-screenshots/%s.png'
 
     for n in range(max_retries):
         log.info('Finding videos for %s, attempt %d',
                  artist[Artist.NAME], n + 1)
         try:
-            if screenshot:
-                screenshot_path = SCREENSHOT_PATH % (
-                    dir_path,
-                    '%d,%s' % (artist[Artist.ID], artist[Artist.NAME])
-                )
-            else:
-                screenshot_path = None
+            if screenshot_path is not None:
+                screenshot_path += '/%s.png' % artist[Artist.NAME]
+
             videos = find_youtube_videos(
                 artist[Artist.YOUTUBE], screenshot_path, options=options)
             log.info('Found %d videos for %s',
@@ -199,7 +194,7 @@ def get_dataframe(artist_id, videos):
     ])
 
 
-def main(db_path, artist_id, max_retries, screenshot):
+def main(db_path, artist_id, max_retries, screenshot_path):
     """Find all youtube videos for an artist and save them to the database."""
     con, cur = get_db(db_path)
 
@@ -209,7 +204,7 @@ def main(db_path, artist_id, max_retries, screenshot):
         return
 
     videos = find_all_youtube_videos_with_retries(
-        artist, max_retries, screenshot)
+        artist, max_retries, screenshot_path)
 
     df = get_dataframe(artist_id, videos)
     videos_in_db = Video.get_by_artist(cur, artist_id)
@@ -227,9 +222,8 @@ if __name__ == '__main__':
     parser.add_argument('--db-path', type=str)
     parser.add_argument('--artist-id', type=str)
     parser.add_argument('--max-retries', type=int, default=3)
-    parser.add_argument(
-        '--screenshot', action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument('--screenshot-path', type=str, default=None)
 
     args = parser.parse_args()
 
-    main(args.db_path, args.artist_id, args.max_retries, args.screenshot)
+    main(args.db_path, args.artist_id, args.max_retries, args.screenshot_path)
