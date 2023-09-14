@@ -1,27 +1,15 @@
 """Find the YouTube channel for an artist."""
+from database import Artist, get_db
 from selenium.webdriver import Chrome
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import sys
 import argparse
-from database import Artist, get_db
 from common import options
-import logging
+from logger import log
 import os
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
-
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=[
-        logging.FileHandler('%s/youtube-scraper-spotify-channels.log'
-                            % dir_path),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-
-log = logging.getLogger(__name__)
 
 
 def find_all_youtube_channels_with_retries(artist_name, max_retries):
@@ -65,9 +53,11 @@ def find_youtube_channel(artist_name, options=None):
         music_channel_anchor = driver.find_element(
             By.CSS_SELECTOR, MUSIC_CHANNEL_SELECTOR)
         if music_channel_anchor is not None:
+            log.debug('Found channel for %s via music channel', artist_name)
             return music_channel_anchor.get_attribute('href')
 
         channel_anchor = driver.find_element(By.CSS_SELECTOR, CHANNEL_SELECTOR)
+        log.debug('Found channel for %s via top search result', artist_name)
         return channel_anchor.get_attribute('href')
 
 
@@ -82,15 +72,19 @@ def main(db_path, artist_name, spotify_uri, max_retries, overwrite):
                   artist_name)
         return
 
-    url = find_all_youtube_channels_with_retries(artist_name, max_retries)
+    try:
+        url = find_all_youtube_channels_with_retries(artist_name, max_retries)
+    except Exception as e:
+        log.exception('Error finding channel for %s: %s', artist_name, e)
+        return
 
     if is_in_database:
-        Artist.set_youtube(cur, artists.index[0], url)
         log.info('Updating %s in database (channel: %s)', artist_name, url)
+        Artist.set_youtube(cur, artists.index[0], url)
     else:
-        Artist.save(cur, artist_name, spotify_uri, url)
         log.info('Creating record for %s to database (channel: %s)',
                  artist_name, url)
+        Artist.save(cur, artist_name, spotify_uri, url)
 
     con.commit()
     log.info('Saved %s to database', artist_name)

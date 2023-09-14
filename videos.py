@@ -8,23 +8,11 @@ import pandas as pd
 from database import Artist, Video, get_db
 from common import options, find_all_in_scrollable
 import argparse
-import sys
 from dataclasses import dataclass
-import logging
 import os
+from logger import log
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
-
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=[
-        logging.FileHandler('%s/youtube-scraper-spotify-videos.log'
-                            % dir_path),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-
-log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -54,7 +42,6 @@ def find_all_youtube_videos_with_retries(artist, max_retries, screenshot_path):
 
     Raises an exception after max_retries.
     """
-
     for n in range(max_retries):
         log.info('Finding videos for %s, attempt %d',
                  artist[Artist.NAME], n + 1)
@@ -64,14 +51,14 @@ def find_all_youtube_videos_with_retries(artist, max_retries, screenshot_path):
 
             videos = find_youtube_videos(
                 artist[Artist.YOUTUBE], screenshot_path, options=options)
-            log.info('Found %d videos for %s',
-                     len(videos), artist[Artist.NAME])
+            log.debug('Found %d videos for %s',
+                      len(videos), artist[Artist.NAME])
             urls = [video.url for video in videos]
 
             music_videos = find_youtube_music_videos(
                 artist[Artist.NAME], options=options)
-            log.info('Found %d music videos for %s',
-                     len(music_videos), artist[Artist.NAME])
+            log.debug('Found %d music videos for %s', len(
+                music_videos), artist[Artist.NAME])
 
             # join two sources of videos
             for video in music_videos:
@@ -114,6 +101,7 @@ def find_youtube_videos(url, screenshot_path=None, options=None):
 
         if screenshot_path is not None:
             driver.save_screenshot(screenshot_path)
+            log.debug('Saved screenshot to %s', screenshot_path)
 
         video_elements = find_all_in_scrollable(
             driver, VIDEO_SELECTOR, MAX_WAIT_TIME, max_elements=MAX_VIDEOS)
@@ -155,7 +143,9 @@ def find_youtube_music_videos(artist_name, options=None):
         try:
             video_elements = wait.until(EC.presence_of_all_elements_located(
                 (By.CSS_SELECTOR, VIDEO_SELECTOR)))
+            log.debug('Found music videos for %s', artist_name)
         except TimeoutException:
+            log.debug('Found no music videos for %s', artist_name)
             return []
 
         for video_el in video_elements:
@@ -203,8 +193,12 @@ def main(db_path, artist_id, max_retries, screenshot_path):
         log.error('ID: %s not found in database', artist_id)
         return
 
-    videos = find_all_youtube_videos_with_retries(
-        artist, max_retries, screenshot_path)
+    try:
+        videos = find_all_youtube_videos_with_retries(
+            artist, max_retries, screenshot_path)
+    except Exception as e:
+        log.exception('Error finding videos for %s: %s',
+                      artist[Artist.NAME], e)
 
     df = get_dataframe(artist_id, videos)
     videos_in_db = Video.get_by_artist(cur, artist_id)

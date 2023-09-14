@@ -1,6 +1,7 @@
 """Methods for interacting with the database."""
 import pandas as pd
 import sqlite3
+from logger import log
 
 
 def generate_schema():
@@ -42,6 +43,7 @@ def get_db(db_path):
     schema = generate_schema()
     cur.executescript(schema)
     con.commit()
+    log.debug('Connected to database at %s', db_path)
     return con, cur
 
 
@@ -77,6 +79,7 @@ class Artist:
             f'SELECT * FROM artist WHERE {Artist.ID} = ?', (artist_id,))
         artists = Artist.sql_result_to_df(cur.fetchall())
         if artists.shape[0] == 0:
+            log.debug('No artist found with id:%s', artist_id)
             return None
         return artists.iloc[0]
 
@@ -106,6 +109,7 @@ class Artist:
             VALUES (?, ?, ?, datetime('2001-01-01'))''',
             (name, spotify_uri, youtube_url)
         )
+        log.debug('Saved artist %s, %s, %s', name, spotify_uri, youtube_url)
 
     def set_youtube(cur, artist_id, youtube_url):
         """Set the YouTube channel for an artist."""
@@ -115,6 +119,8 @@ class Artist:
                SET {Artist.YOUTUBE} = "{youtube_url}"
                WHERE id = {artist_id}'''
         )
+        log.debug('Set YouTube channel for artist id:%s to %s',
+                  artist_id, youtube_url)
 
     def set_updated(cur, artist_id):
         """Set the updated_at field for an artist."""
@@ -124,6 +130,7 @@ class Artist:
                WHERE id = ?''',
             (artist_id,)
         )
+        log.debug('Set updated_at for artist id:%s to now', artist_id)
 
 
 class Video:
@@ -179,6 +186,7 @@ class Video:
             videos_df[[Video.ARTIST_ID, Video.TITLE,
                        Video.YOUTUBE, Video.VIEWS]].itertuples(index=False)
         )
+        log.debug('Saved %s videos', videos_df.shape[0])
 
     def set_updated(cur, video_id):
         """Set the updated_at field for a video."""
@@ -188,6 +196,7 @@ class Video:
                WHERE id = ?''',
             (video_id,)
         )
+        log.debug('Set updated_at for video id:%s to now', video_id)
 
 
 class Comment:
@@ -248,3 +257,4 @@ class Comment:
             comments_df[[Comment.VIDEO_ID, Comment.CONTENT, Comment.LANGUAGE]
                         ].itertuples(index=False)
         )
+        log.debug('Saved %s comments', comments_df.shape[0])

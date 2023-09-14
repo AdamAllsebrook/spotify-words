@@ -3,28 +3,16 @@ from selenium.webdriver import Chrome
 from selenium.webdriver.common.by import By
 import pandas as pd
 import argparse
-import sys
 import time
 from database import Video, Comment, get_db
 import spacy
 from spacy.language import Language
 from spacy_language_detection import LanguageDetector
 from common import options, find_all_in_scrollable
-import logging
 import os
+from logger import log
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
-
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=[
-        logging.FileHandler('%s/youtube-scraper-spotify-comments.log'
-                            % dir_path),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-
-log = logging.getLogger(__name__)
 
 
 def find_youtube_comments_with_retries(url, max_comments, max_retries):
@@ -71,10 +59,10 @@ def find_youtube_comments(url, max_comments, options=None):
         if len(comments) == 0:
             body = driver.find_element(By.TAG_NAME, 'body')
             if 'Comments are turned off' in body.text:
-                log.info('Comments are turned off for %s', url)
+                log.debug('Comments are turned off for %s', url)
                 return []
             if '\n0 Comments' in body.text:
-                log.info('%s has 0 comments', url)
+                log.debug('%s has 0 comments', url)
                 return []
             raise Exception(
                 'Video URL %s has no comments, but was expected to have some'
@@ -123,9 +111,14 @@ def main(db_path, video_id, max_comments, max_retries):
         log.error('ID: %s not found in database', video_id)
         return
 
-    comments = find_youtube_comments_with_retries(
-        video[Video.YOUTUBE], max_comments, max_retries)
+    try:
+        comments = find_youtube_comments_with_retries(
+            video[Video.YOUTUBE], max_comments, max_retries)
+    except Exception as e:
+        log.exception('Error finding comments for %s: %s',
+                      video[Video.YOUTUBE], e)
     languages = detect_languages(comments)
+    log.debug('Finished detecting languages')
 
     df = create_dataframe(video_id, comments, languages)
     comments_in_db = Comment.get_by_video(cur, video_id)
