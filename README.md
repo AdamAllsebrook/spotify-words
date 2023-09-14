@@ -60,6 +60,22 @@ FROM RankedVideos
 WHERE row_num <= 10 and updated_at < DATETIME('now', '-28 days')
 ```
 
+### Export data to CSV
+Artists
+```bash
+sqlite3 datasets/db.sqlite ".headers on" ".mode csv" ".output datasets/artist.csv" "select * from artist"
+```
+
+Videos
+```bash
+sqlite3 datasets/db.sqlite ".headers on" ".mode csv" ".output datasets/artist.csv" "select * from video"
+```
+
+Comments
+```bash
+sqlite3 datasets/db.sqlite ".headers on" ".mode csv" ".output datasets/comment.csv" "select id, video_id, content, language from comment"
+```
+
 ## Testing
 ```bash
 python test.py
